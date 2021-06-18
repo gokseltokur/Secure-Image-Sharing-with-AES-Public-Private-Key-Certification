@@ -1,3 +1,4 @@
+import encrypt_decrypt_aes
 import socket
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -8,7 +9,15 @@ import tqdm
 import os
 from Crypto.Random import get_random_bytes
 from Crypto import Random
-from enrypt_decrypt_aes import *
+from Crypto.Cipher import AES
+import io
+import PIL.Image
+import os
+from Crypto.Signature import PKCS1_v1_5
+from Crypto.Hash import SHA256
+from Crypto import Random
+from Crypto.PublicKey import RSA
+from base64 import b64encode, b64decode
 
 
 def create_public_private_key():
@@ -48,7 +57,8 @@ def store_public_key(public_key):
 
 
 def send_file(s, filename, filesize):
-    progress = tqdm.tqdm(range(filesize), f"Sending {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+    progress = tqdm.tqdm(range(
+        filesize), f"Sending {filename}", unit="B", unit_scale=True, unit_divisor=1024)
     with open(filename, "rb") as f:
         while True:
             # read the bytes from the file
@@ -63,8 +73,10 @@ def send_file(s, filename, filesize):
             # update the progress bar
             progress.update(len(bytes_read))
 
+
 def receive_file(client_socket, filename, filesize):
-    progress = tqdm.tqdm(range(filesize), f"Receiving {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+    progress = tqdm.tqdm(range(
+        filesize), f"Receiving {filename}", unit="B", unit_scale=True, unit_divisor=1024)
     with open(filename, "wb") as f:
         while True:
             # read 1024 bytes from the socket (receive)
@@ -79,11 +91,61 @@ def receive_file(client_socket, filename, filesize):
             progress.update(len(bytes_read))
 
 
+def pad(data):
+    return data + b"\x00" * (16 - len(data) % 16)
+
+
+def encrypt_image(key, iv, file):
+
+    cwd = os.getcwd()
+    input_file = open(cwd + "/" + file, "rb")
+    input_data = input_file.read()
+    input_file.close()
+    cbc_cipher = AES.new(key, AES.MODE_CBC, iv)
+    enc_data = cbc_cipher.encrypt(pad(input_data))
+    enc_file = open(os.path.join(cwd + "/common/", file)+".enc", "wb")
+    enc_file.write(enc_data)
+    enc_file.close()
+
+    return enc_data
+
+
+def decrypt_image(key, iv, enc_data):
+    cwd = os.getcwd()
+    cbc_cipher = AES.new(key, AES.MODE_CBC, iv)
+    plain_data = cbc_cipher.decrypt(pad(enc_data))
+
+    imageStream = io.BytesIO(plain_data)
+    imageFile = PIL.Image.open(imageStream)
+    file_str = file.lower()
+    if(".jpg" in file_str):
+        imageFile.save(((os.path.join(cwd + "/common", file))[:-8])+".JPG")
+    elif(".png" in file_str):
+        imageFile.save(((os.path.join(cwd + "/common", file))[:-8]) + ".png")
+
+
+def sign(message, private_key):
+    signer = PKCS1_v1_5.new(private_key)
+    digest = SHA256.new()
+    digest.update(message.encode('utf-8'))
+    return signer.sign(digest)
+
+
+def verify(message, signature, public_key):
+    signer = PKCS1_v1_5.new(public_key)
+    digest = SHA256.new()
+    digest.update(message.encode('utf-8'))
+    return signer.verify(digest, signature)
+
+
 def send_image():
     key = get_random_bytes(16)
     iv = Random.new().read(AES.block_size)
 
     encrypted_img = encrypt_image(key, iv, "kyle.png")
+
+    
+
 
 
 # create an ipv4 (AF_INET) socket object using the tcp protocol (SOCK_STREAM)
@@ -107,15 +169,12 @@ client.send(str.encode(password))
 '''
 
 
-
 # Input Public Key
 public_key, _ = create_public_private_key()
 # client.send(str.encode(public_key))
 filesize = os.path.getsize('public_key.pem')
 client.send(str.encode(str(filesize)))
 send_file(client, 'public_key.pem', filesize)
-
-
 
 
 certificate_filesize = client.recv(2048)
