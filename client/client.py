@@ -45,8 +45,7 @@ def store_public_key(public_key):
 
 
 def send_file(s, filename, filesize):
-    progress = tqdm.tqdm(range(
-        filesize), f"Sending {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+    progress = tqdm.tqdm(range(filesize), f"Sending {filename}", unit="B", unit_scale=True, unit_divisor=1024)
     with open(filename, "rb") as f:
         while True:
             # read the bytes from the file
@@ -57,6 +56,21 @@ def send_file(s, filename, filesize):
             # we use sendall to assure transimission in
             # busy networks
             s.sendall(bytes_read)
+            # update the progress bar
+            progress.update(len(bytes_read))
+
+def receive_file(client_socket, filename, filesize):
+    progress = tqdm.tqdm(range(filesize), f"Receiving {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+    with open(filename, "wb") as f:
+        while True:
+            # read 1024 bytes from the socket (receive)
+            bytes_read = client_socket.recv(2048)
+            if not bytes_read:
+                # nothing is received
+                # file transmitting is done
+                break
+            # write to the file the bytes we just received
+            f.write(bytes_read)
             # update the progress bar
             progress.update(len(bytes_read))
 
@@ -80,6 +94,9 @@ client.send(str.encode(password))
 	2 : Connection Successful
 	3 : Login Failed
 '''
+
+
+
 # Input Public Key
 public_key, _ = create_public_private_key()
 # client.send(str.encode(public_key))
@@ -88,9 +105,17 @@ client.send(str.encode(str(filesize)))
 send_file(client, 'client/public_key.pem', filesize)
 
 
+
+
+certificate_filesize = client.recv(2048)
+certificate_filesize = certificate_filesize.decode()
+certificate_filesize = int(certificate_filesize)
+receive_file(client, 'client/certificate.CA', certificate_filesize)
+
 # Receive response
 response = client.recv(2048)
 response = response.decode()
-
 print(response)
+
+
 client.close()
