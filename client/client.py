@@ -30,7 +30,7 @@ def store_private_key(private_key):
         encryption_algorithm=serialization.NoEncryption()
     )
 
-    with open('client/private_key.pem', 'wb') as f:
+    with open('private_key.pem', 'wb') as f:
         f.write(pem)
 
 
@@ -40,7 +40,7 @@ def store_public_key(public_key):
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 
-    with open('client/public_key.pem', 'wb') as f:
+    with open('public_key.pem', 'wb') as f:
         f.write(pem)
 
 
@@ -52,6 +52,7 @@ def send_file(s, filename, filesize):
             bytes_read = f.read(2048)
             if not bytes_read:
                 # file transmitting is done
+                s.sendall(b'@@DONE')
                 break
             # we use sendall to assure transimission in
             # busy networks
@@ -100,9 +101,9 @@ client.send(str.encode(password))
 # Input Public Key
 public_key, _ = create_public_private_key()
 # client.send(str.encode(public_key))
-filesize = os.path.getsize('client/public_key.pem')
+filesize = os.path.getsize('public_key.pem')
 client.send(str.encode(str(filesize)))
-send_file(client, 'client/public_key.pem', filesize)
+send_file(client, 'public_key.pem', filesize)
 
 
 
@@ -110,7 +111,7 @@ send_file(client, 'client/public_key.pem', filesize)
 certificate_filesize = client.recv(2048)
 certificate_filesize = certificate_filesize.decode()
 certificate_filesize = int(certificate_filesize)
-receive_file(client, 'client/certificate.CA', certificate_filesize)
+receive_file(client, 'certificate.CA', certificate_filesize)
 
 # Receive response
 response = client.recv(2048)
