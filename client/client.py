@@ -8,7 +8,6 @@ import tqdm
 import os
 from Crypto.Random import get_random_bytes
 from Crypto import Random
-from enrypt_decrypt_aes import *
 
 
 def create_public_private_key():
