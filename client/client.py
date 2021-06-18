@@ -6,6 +6,9 @@ import sys
 import logging
 import tqdm
 import os
+from Crypto.Random import get_random_bytes
+from Crypto import Random
+from enrypt_decrypt_aes import *
 
 
 def create_public_private_key():
@@ -59,6 +62,13 @@ def send_file(s, filename, filesize):
             s.sendall(bytes_read)
             # update the progress bar
             progress.update(len(bytes_read))
+
+
+def send_image():
+    key = get_random_bytes(16)
+    iv = Random.new().read(AES.block_size)
+
+    encrypted_img = encrypt_image(key, iv, "kyle.png")
 
 
 # create an ipv4 (AF_INET) socket object using the tcp protocol (SOCK_STREAM)
