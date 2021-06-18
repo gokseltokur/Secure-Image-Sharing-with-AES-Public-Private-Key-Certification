@@ -125,6 +125,7 @@ def send_file(s, filename, filesize):
             bytes_read = f.read(2048)
             if not bytes_read:
                 # file transmitting is done
+                s.sendall(b'@@DONE')
                 break
             # we use sendall to assure transimission in
             # busy networks
@@ -181,6 +182,13 @@ def threaded_client(connection):
         send_file(connection, user_certificate_filename, user_certificate_filesize)
         logging.info("User's certificate sent")
         print("User's certificate is sent")
+
+
+        logging.info("Server's public key will be sent")
+        filesize = os.path.getsize('server_public_key.pem')
+        connection.send(str.encode(str(filesize)))
+        send_file(connection, 'server_public_key.pem', filesize)
+        logging.info("Servers's public key sent to the user")
 
 
         connection.send(str.encode('Registration Successful'))
