@@ -17,7 +17,7 @@ import base64
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s',
-                    filename='server/server.log', filemode='w')
+                    filename='server.log', filemode='w')
 
 
 # Create Socket (TCP) Connection
@@ -36,7 +36,7 @@ HashTable = {}
 
 
 def sign_certificate(public_key, username):
-    with open("server/server_private_key.pem", "rb") as key_file:
+    with open("server_private_key.pem", "rb") as key_file:
         server_private_key = serialization.load_pem_private_key(
             key_file.read(),
             password=None,
@@ -48,7 +48,7 @@ def sign_certificate(public_key, username):
         certificate = server_private_key.sign(public_key, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
 
         print(base64.b64encode(certificate))
-        with open('server/certificates/certificate_' + str(username) + '.CA', 'wb') as f:
+        with open('certificates/certificate_' + str(username) + '.CA', 'wb') as f:
             f.write(base64.b64encode(certificate))
 
 
@@ -65,7 +65,7 @@ def create_server_public_private_key():
 def store_server_private_key(private_key):
     pem = private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
 
-    with open('server/server_private_key.pem', 'wb') as f:
+    with open('server_private_key.pem', 'wb') as f:
         f.write(pem)
 
 
@@ -75,7 +75,7 @@ def store_server_public_key(public_key):
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 
-    with open('server/server_public_key.pem', 'wb') as f:
+    with open('server_public_key.pem', 'wb') as f:
         f.write(pem)
 
 def store_public_key(public_key, username):
@@ -84,18 +84,20 @@ def store_public_key(public_key, username):
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 
-    with open('server/public_keys/public_key' + str(username) + '.pem', 'wb') as f:
+    with open('public_keys/public_key' + str(username) + '.pem', 'wb') as f:
         f.write(pem)
 
 
 def receive_file(client_socket, filename, filesize):
     progress = tqdm.tqdm(range(filesize), f"Receiving {filename}", unit="B", unit_scale=True, unit_divisor=1024)
-    print('@@@')
     with open(filename, "wb") as f:
         while True:
-            print('@@@')
             # read 1024 bytes from the socket (receive)
             bytes_read = client_socket.recv(2048)
+            if bytes_read == b'@@DONE':
+                # nothing is received
+                # file transmitting is done
+                break
             if not bytes_read:
                 # nothing is received
                 # file transmitting is done
@@ -104,7 +106,6 @@ def receive_file(client_socket, filename, filesize):
             f.write(bytes_read)
             # update the progress bar
             progress.update(len(bytes_read))
-    print('@@@DONE')
 
 
 def load_public_key(filename):
@@ -115,9 +116,6 @@ def load_public_key(filename):
         )
         return public_key
 
-# Function : For each client
-
-
 def send_file(s, filename, filesize):
     progress = tqdm.tqdm(range(filesize), f"Sending {filename}", unit="B", unit_scale=True, unit_divisor=1024)
 
@@ -127,6 +125,7 @@ def send_file(s, filename, filesize):
             bytes_read = f.read(2048)
             if not bytes_read:
                 # file transmitting is done
+                s.sendall(b'@@DONE')
                 break
             # we use sendall to assure transimission in
             # busy networks
@@ -134,7 +133,7 @@ def send_file(s, filename, filesize):
             # update the progress bar
             progress.update(len(bytes_read))
 
-
+# Function : For each client
 def threaded_client(connection):
     connection.send(str.encode('ENTER USERNAME : '))  # Request Username
     name = connection.recv(2048)
@@ -163,8 +162,7 @@ def threaded_client(connection):
         user_public_key_filesize = user_public_key_filesize.decode()
         user_public_key_filesize = int(user_public_key_filesize)
         print("User's public key receiving")
-        user_public_key_filename = 'server/public_keys/public_key_' + str(name) + '.pem'
-        print('@@@')
+        user_public_key_filename = 'public_keys/public_key_' + str(name) + '.pem'
         receive_file(connection, user_public_key_filename, user_public_key_filesize)
         user_public_key = load_public_key(user_public_key_filename)
         logging.info("User's public key received")
@@ -174,7 +172,7 @@ def threaded_client(connection):
         logging.info("User's certificate will be created")
         print("User's certificate will be created")
         sign_certificate(user_public_key, name)
-        user_certificate_filename = 'server/certificates/certificate_' + str(name) + '.CA'
+        user_certificate_filename = 'certificates/certificate_' + str(name) + '.CA'
         logging.info("User's certificate is created")
         print("User's certificate is created")
         logging.info("User's certificate will be sent")
@@ -186,10 +184,17 @@ def threaded_client(connection):
         print("User's certificate is sent")
 
 
+        logging.info("Server's public key will be sent")
+        filesize = os.path.getsize('server_public_key.pem')
+        connection.send(str.encode(str(filesize)))
+        send_file(connection, 'server_public_key.pem', filesize)
+        logging.info("Servers's public key sent to the user")
+
+
         connection.send(str.encode('Registration Successful'))
         
         logging.info("Registeration Successful username: {} password: {} public_key: {}".format(
-            name, password, 'server/public_keys/public_key_' + str(name) + '.pem'))
+            name, password, 'public_keys/public_key_' + str(name) + '.pem'))
         
     # If already existing user, check if the entered password is correct
     else:

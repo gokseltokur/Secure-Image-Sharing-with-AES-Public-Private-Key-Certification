@@ -18,6 +18,11 @@ from Crypto.Hash import SHA256
 from Crypto import Random
 from Crypto.PublicKey import RSA
 from base64 import b64encode, b64decode
+import base64
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
+from cryptography.x509.oid import NameOID
+from cryptography import x509
 
 
 def create_public_private_key():
@@ -81,6 +86,10 @@ def receive_file(client_socket, filename, filesize):
         while True:
             # read 1024 bytes from the socket (receive)
             bytes_read = client_socket.recv(2048)
+            if bytes_read == b'@@DONE':
+                # nothing is received
+                # file transmitting is done
+                break
             if not bytes_read:
                 # nothing is received
                 # file transmitting is done
@@ -144,8 +153,36 @@ def send_image():
 
     encrypted_img = encrypt_image(key, iv, "kyle.png")
 
-    
+def load_public_key(filename):
+    with open(filename, "rb") as key_file:
+        public_key = serialization.load_pem_public_key(
+            key_file.read(),
+            backend=default_backend()
+        )
+        return public_key
 
+
+def verify_certificate(certificate_file):
+    server_public_key = load_public_key('server_public_key.pem')
+    user_public_key = load_public_key('public_key.pem').public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    print('user_public_key', user_public_key)
+
+    with open(certificate_file) as s:
+        certificate = s.read()
+        decoded_certificate = base64.b64decode(certificate)
+        try:
+            server_public_key.verify(
+                decoded_certificate,
+                user_public_key,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH),
+                hashes.SHA256())
+            print('Valid Certificate')
+            #sys.exit(0)
+        except InvalidSignature:
+            print('Invalid Certificate!')
+            #sys.exit(1)
 
 
 # create an ipv4 (AF_INET) socket object using the tcp protocol (SOCK_STREAM)
@@ -171,16 +208,25 @@ client.send(str.encode(password))
 
 # Input Public Key
 public_key, _ = create_public_private_key()
-# client.send(str.encode(public_key))
+
+# Send public key of client
 filesize = os.path.getsize('public_key.pem')
 client.send(str.encode(str(filesize)))
 send_file(client, 'public_key.pem', filesize)
 
-
+# Receive Certificate from server
 certificate_filesize = client.recv(2048)
 certificate_filesize = certificate_filesize.decode()
 certificate_filesize = int(certificate_filesize)
 receive_file(client, 'certificate.CA', certificate_filesize)
+
+# Receive Public Key of the server
+filesize = int(client.recv(2048).decode())
+receive_file(client, 'server_public_key.pem', filesize)
+
+
+verify_certificate('certificate.CA')
+
 
 # Receive response
 response = client.recv(2048)
