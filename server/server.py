@@ -13,6 +13,10 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 import base64
+from Crypto.Cipher import AES
+import io
+import PIL.Image
+from Crypto.Cipher import PKCS1_OAEP
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s',
@@ -151,6 +155,51 @@ def send_file(s, filename, filesize):
 # Function : For each client
 
 
+def decrypt_image(key, iv, enc_data, filename):
+    cwd = os.getcwd()
+    print("cwd in decrypt image: " + cwd)
+    cbc_cipher = AES.new(key, AES.MODE_CBC, iv)
+    plain_data = cbc_cipher.decrypt(pad(enc_data))
+
+    imageStream = io.BytesIO(plain_data)
+    imageFile = PIL.Image.open(imageStream)
+    file_str = filename.lower()
+    if(".jpg" in file_str):
+        imageFile.save(((os.path.join(cwd, filename))[:-8])+".JPG")
+    elif(".png" in file_str):
+        imageFile.save(((os.path.join(cwd, filename))[:-8]) + ".png")
+
+
+def encrypt_with_rsa_public_key(public_key, message):
+    cipher = PKCS1_OAEP.new(public_key)
+    return cipher.encrypt(message)
+
+
+def decrypt_message_with_private_key(private_key, encrypted):
+    decipher = PKCS1_OAEP.new(private_key)
+    return decipher.decrypt(encrypted)
+
+
+def verify_image(filename):
+    with open("images/" + filename + '.txt', "r") as image_file:
+        data = image_file.read()
+
+    splitted_data = data.split('\n\n')
+
+    # image encrypted with aes key
+    enrypted_image = splitted_data[1]
+    # digital signature created with private key of the client
+    digital_signature = splitted_data[2]
+    # aes key and iv encrypted with public key of the server
+    encrypted_key = splitted_data[3]
+    encrypted_iv = splitted_data[4]
+
+    key = decrypt_message_with_private_key(server_private_key, encrypted_key)
+    iv = decrypt_message_with_private_key(server_private_key, encrypted_iv)
+
+
+    
+
 def threaded_client(connection):
     global online_clients
     connection.send(str.encode('ENTER USERNAME : '))  # Request Username
@@ -228,21 +277,28 @@ def threaded_client(connection):
             connection.send(str.encode('Login Failed'))
             print('Connection denied : ', name)
     while True:
-        request = connection.recv(2048)
+        request = connection.recv(2048).decode()
 
-        if request == b'POST_IMAGE':
+        if request == 'POST_IMAGE':
             filesize = int(connection.recv(2048).decode())
             filename = connection.recv(2048).decode()
             receive_file(connection, "images/" + filename + '.txt', filesize)
+
+            verify_image(filename)
             send_notification(online_clients, "\nNEW_IMAGE " + filename)
 
-    #connection.close()
+        elif request.split()[0] == 'DOWNLOAD':
+            image_name = request.split()[1]
+
+    # connection.close()
+
 
 def send_notification(online_clients, notification):
     notification = str.encode(notification)
     for client in online_clients:
         print("@", client)
         client.send(notification)
+
 
 create_server_public_private_key()
 

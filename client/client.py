@@ -127,7 +127,7 @@ def encrypt_image(key, iv, file):
     enc_file.write(enc_data)
     enc_file.close()
 
-    return enc_data
+    return enc_data, input_data
 
 
 def decrypt_image(key, iv, enc_data, filename):
@@ -176,11 +176,10 @@ def send_image(socket, private_key, public_key):
     key = get_random_bytes(16)
     iv = Random.new().read(AES.block_size)
 
-    encrypted_img = encrypt_image(key, iv, filename)
+    encrypted_img, image = encrypt_image(key, iv, filename)
 
-    digital_sign = b64encode(sign(encrypted_img, private_key))
+    digital_sign = b64encode(sign(image, private_key))
 
-    # TODO implement public key enryption
     encrypted_key = encrypt_with_rsa_public_key(public_key, key)
     encrypted_iv = encrypt_with_rsa_public_key(public_key, iv)
 
@@ -287,7 +286,7 @@ response = response.decode()
 print(response)
 
 if response == "Registration Successful":
-    #print("girdi")
+    # print("girdi")
     f = open('server_public_key.pem', 'r')
     server_public_key = RSA.importKey(f.read())
     f.close()
