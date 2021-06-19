@@ -5,7 +5,6 @@
 * Arda Bayram - 150116029
 
 ## <> This project is a simple image sharing system with several security features. <>
----------------------------------------------------------------------
 ## 1. Registration and Public Key Certification
 
 We created a local server running on port 1233. This server waits for clients to connect.
