@@ -24,7 +24,6 @@ from cryptography.x509.oid import NameOID
 from cryptography import x509
 import json
 import ast
-import simplejson
 
 
 def create_public_private_key():
@@ -199,12 +198,12 @@ def send_image(socket, private_key, public_key):
 
     socket.send(b"POST_IMAGE")
 
-    filesize = os.path.getsize('data.txt')
+    filesize = os.path.getsize(filename + '.txt')
 
     socket.send(str.encode(str(filesize)))
     socket.send(filename.encode())
 
-    send_file(socket, 'data.txt', filesize)
+    send_file(socket, filename + '.txt', filesize)
 
 
 def load_public_key(filename):
@@ -288,7 +287,7 @@ response = response.decode()
 print(response)
 
 if response == "Registration Successful":
-    print("girdi")
+    #print("girdi")
     f = open('server_public_key.pem', 'r')
     server_public_key = RSA.importKey(f.read())
     f.close()

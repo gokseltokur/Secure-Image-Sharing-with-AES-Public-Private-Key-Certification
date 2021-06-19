@@ -215,8 +215,6 @@ def threaded_client(connection):
         logging.info("Registeration Successful username: {} password: {} public_key: {}".format(
             name, password, 'public_keys/public_key_' + str(name) + '.pem'))
 
-        send_notification(online_clients, "REGISTERED")
-
     # If already existing user, check if the entered password is correct
     else:
 
@@ -236,6 +234,7 @@ def threaded_client(connection):
             filesize = int(connection.recv(2048).decode())
             filename = connection.recv(2048).decode()
             receive_file(connection, "images/" + filename + '.txt', filesize)
+            send_notification(online_clients, "\nNEW_IMAGE " + filename)
 
     #connection.close()
 
