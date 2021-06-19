@@ -211,11 +211,18 @@ def threaded_client(connection):
         break
     connection.close()
 
+def send_notification(online_clients, notification):
+    for client in online_clients:
+        client.send(notification)
 
 create_server_public_private_key()
 
+
+online_clients = []
 while True:
     Client, address = ServerSocket.accept()
+    online_clients += [Client]
+    print('Online Clients = ', online_clients)
     client_handler = threading.Thread(
         target=threaded_client,
         args=(Client,)
