@@ -66,40 +66,49 @@ def store_public_key(public_key):
 def send_file(s, filename, filesize):
     progress = tqdm.tqdm(range(
         filesize), f"Sending {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+    total = 0
     with open(filename, "rb") as f:
-        while True:
-            # read the bytes from the file
-            bytes_read = f.read(2048)
-            if not bytes_read:
-                # file transmitting is done
-                s.sendall(b'@@DONE')
-                break
-            # we use sendall to assure transimission in
-            # busy networks
-            s.sendall(bytes_read)
-            # update the progress bar
-            progress.update(len(bytes_read))
+        # progress or tqdm bar
+        for _ in progress:
+            while total != filesize:
+                # read the bytes from the file
+                bytes_read = f.read(2048)
+
+                # to check when file is done transmitting
+                if total == filesize:
+                    break
+
+                # we use sendall to assure transimission in
+                # busy networks
+                s.sendall(bytes_read)
+
+                # update the progress bar
+                progress.update(len(bytes_read))
+                total += len(bytes_read)
+    f.close()
 
 
 def receive_file(client_socket, filename, filesize):
     progress = tqdm.tqdm(range(
         filesize), f"Receiving {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+    total = 0
     with open(filename, "wb") as f:
-        while True:
-            # read 1024 bytes from the socket (receive)
-            bytes_read = client_socket.recv(2048)
-            if bytes_read == b'@@DONE':
-                # nothing is received
-                # file transmitting is done
-                break
-            if not bytes_read:
-                # nothing is received
-                # file transmitting is done
-                break
-            # write to the file the bytes we just received
-            f.write(bytes_read)
-            # update the progress bar
-            progress.update(len(bytes_read))
+        for _ in progress:
+            while total != filesize:
+                # read 1024 bytes from the socket (receive)
+                bytes_read = client_socket.recv(2048)
+
+                if total == filesize:
+                    # nothing is received
+                    # file transmitting is done
+                    break
+                # write to the file the bytes we just received
+                f.write(bytes_read)
+
+                # update the progress bar
+                progress.update(len(bytes_read))
+                total += len(bytes_read)
+    f.close()
 
 
 def pad(data):
@@ -172,11 +181,10 @@ def send_image(private_key, socket):
 
     m = {"type": "POST_IMAGE", "encrypted_img": encrypted_img, "digital_sign": digital_sign,
          "encrypted_key": encrypted_key, "encrypted_iv": encrypted_iv}
+    print(m)
     data = json.dumps(m)
 
     socket.sendall(bytes(data, encoding="utf-8"))
-
-    socket.close()
 
 
 def load_public_key(filename):
