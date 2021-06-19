@@ -17,6 +17,8 @@ from Crypto.Cipher import AES
 import io
 import PIL.Image
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+from base64 import b64encode, b64decode
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s',
@@ -154,6 +156,8 @@ def send_file(s, filename, filesize):
     f.close()
 # Function : For each client
 
+def pad(data):
+    return data + b"\x00" * (16 - len(data) % 16)
 
 def decrypt_image(key, iv, enc_data, filename):
     cwd = os.getcwd()
@@ -163,11 +167,7 @@ def decrypt_image(key, iv, enc_data, filename):
 
     imageStream = io.BytesIO(plain_data)
     imageFile = PIL.Image.open(imageStream)
-    file_str = filename.lower()
-    if(".jpg" in file_str):
-        imageFile.save(((os.path.join(cwd, filename))[:-8])+".JPG")
-    elif(".png" in file_str):
-        imageFile.save(((os.path.join(cwd, filename))[:-8]) + ".png")
+    imageFile.save(filename)
 
 
 def encrypt_with_rsa_public_key(public_key, message):
@@ -179,25 +179,79 @@ def decrypt_message_with_private_key(private_key, encrypted):
     decipher = PKCS1_OAEP.new(private_key)
     return decipher.decrypt(encrypted)
 
+def verify(message, signature, public_key):
+    try:
+        public_key.verify(message, signature, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
+        print('Valid Signature')
+        return True
+    except InvalidSignature:
+        print('Invalid Signature!')
+        return False
 
-def verify_image(filename):
-    with open("images/" + filename + '.txt', "r") as image_file:
+
+def verify_image(filename, username):
+    with open("images/" + filename + '.txt', "rb") as image_file:
         data = image_file.read()
 
-    splitted_data = data.split('\n\n')
+    splitted_data = data.split(b'\n\n')
 
     # image encrypted with aes key
-    enrypted_image = splitted_data[1]
+    enrypted_img = splitted_data[1]
     # digital signature created with private key of the client
     digital_signature = splitted_data[2]
     # aes key and iv encrypted with public key of the server
     encrypted_key = splitted_data[3]
     encrypted_iv = splitted_data[4]
 
-    key = decrypt_message_with_private_key(server_private_key, encrypted_key)
-    iv = decrypt_message_with_private_key(server_private_key, encrypted_iv)
+    f = open('server_private_key.pem', 'r')
+    server_private_key = RSA.importKey(f.read())
 
+    key = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_key))
+    iv = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_iv))
 
+    decrypted_img = decrypt_image(key, iv, b64decode(enrypted_img), filename)
+
+    f = open('public_keys/public_key_' + username + '.pem', 'r')
+    user_public_key = RSA.importKey(f.read())
+
+    return verify(decrypted_img, digital_signature, user_public_key)
+
+def send_image(socket, requester_public_key, filename):
+    with open("images/" + filename + '.txt', "rb") as image_file:
+        data = image_file.read()
+
+    splitted_data = data.split(b'\n\n')
+
+    # image encrypted with aes key
+    encrypted_img = splitted_data[1]
+    # digital signature created with private key of the client
+    digital_signature = splitted_data[2]
+    # aes key and iv encrypted with public key of the server
+    encrypted_key = splitted_data[3]
+    encrypted_iv = splitted_data[4]
+    sender_certificate = splitted_data[5]
+
+    f = open('server_private_key.pem', 'r')
+    server_private_key = RSA.importKey(f.read())
+
+    key = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_key))
+    iv = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_iv))
+
+    requester_encrypted_key = encrypt_with_rsa_public_key(requester_public_key, key)
+    requester_encrypted_iv = encrypt_with_rsa_public_key(requester_public_key, iv)
+
+    m = b64encode(encrypted_img) + b'\n\n' + b64encode(digital_signature) + \
+        b'\n\n' + sender_certificate + b'\n\n' + b64encode(requester_encrypted_key) + b'\n\n' + b64encode(requester_encrypted_iv)
+
+    with open('send_files/' + filename + '.txt', 'wb') as outfile:
+        outfile.write(m)
+    outfile.close()
+
+    filesize = os.path.getsize('send_files/' + filename + '.txt')
+
+    socket.send(str.encode(str(filesize)))
+
+    send_file(socket, 'send_files/' + filename + '.txt', filesize)
     
 
 def threaded_client(connection):
@@ -278,17 +332,22 @@ def threaded_client(connection):
             print('Connection denied : ', name)
     while True:
         request = connection.recv(2048).decode()
-
         if request == 'POST_IMAGE':
             filesize = int(connection.recv(2048).decode())
             filename = connection.recv(2048).decode()
             receive_file(connection, "images/" + filename + '.txt', filesize)
 
-            verify_image(filename)
+            # verify_image(filename, name)
             send_notification(online_clients, "\nNEW_IMAGE " + filename)
 
         elif request.split()[0] == 'DOWNLOAD':
+            print('girdi')
             image_name = request.split()[1]
+
+            f = open('public_keys/public_key_' + str(name) + '.pem', 'r')
+            requester_public_key = RSA.importKey(f.read())
+            # socket, filename
+            send_image(connection, requester_public_key, image_name)
 
     # connection.close()
 
