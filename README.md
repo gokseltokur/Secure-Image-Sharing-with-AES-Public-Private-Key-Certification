@@ -90,6 +90,7 @@ if(HashTable[name] == password):
 else:
     connection.send(str.encode('Login Failed'))
 ```
+## 2. Image Sharing
 
 Finally, login or registration stages are completed, the server waits for the client's request. If the request is 'POST IMAGE', the server takes the image file from the user and stores it its own.
 ```python
@@ -120,7 +121,6 @@ def encrypt_image(key, iv, file):
 
     return enc_data, input_data
 
-
 def decrypt_image(key, iv, enc_data, filename):
     cwd = os.getcwd()
     print("cwd in decrypt image: " + cwd)
@@ -150,7 +150,6 @@ def verify(message, signature, public_key):
             salt_length=padding.PSS.MAX_LENGTH),
         hashes.SHA256())
 
-
 def encrypt_with_rsa_public_key(public_key, message):
     cipher = PKCS1_OAEP.new(public_key)
     return cipher.encrypt(message)
@@ -159,7 +158,6 @@ def encrypt_with_rsa_public_key(public_key, message):
 def decrypt_message_with_private_key(private_key, encrypted):
     decipher = PKCS1_OAEP.new(private_key)
     return decipher.decrypt(encrypted)
-
 
 def send_image(socket, private_key, public_key):
     filename = "kyle.png"
@@ -195,6 +193,7 @@ def send_image(socket, private_key, public_key):
 
     send_file(socket, filename + '.txt', filesize)
 ```
+## 3. Notification
 
 When the image is received by server. Server sends notification that is "NEW_IMAGE image_name", to all online clients that is already connected.
 ```python
