@@ -271,7 +271,6 @@ print(response)
 
 while True:
     response = client.recv(2048)
-    print(response.decode())
 
 
 client.close()

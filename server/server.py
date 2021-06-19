@@ -151,6 +151,7 @@ def send_file(s, filename, filesize):
 
 
 def threaded_client(connection):
+    global online_clients
     connection.send(str.encode('ENTER USERNAME : '))  # Request Username
     name = connection.recv(2048)
     connection.send(str.encode('ENTER PASSWORD : '))  # Request Password
@@ -213,6 +214,8 @@ def threaded_client(connection):
         logging.info("Registeration Successful username: {} password: {} public_key: {}".format(
             name, password, 'public_keys/public_key_' + str(name) + '.pem'))
 
+        send_notification(online_clients, "REGISTERED")
+
     # If already existing user, check if the entered password is correct
     else:
 
@@ -226,13 +229,14 @@ def threaded_client(connection):
             print('Connection denied : ', name)
     while True:
         break
-    connection.close()
+    #connection.close()
 
 
 def send_notification(online_clients, notification):
+    notification = str.encode(notification)
     for client in online_clients:
+        print("@", client)
         client.send(notification)
-
 
 create_server_public_private_key()
 
@@ -240,7 +244,7 @@ create_server_public_private_key()
 online_clients = []
 while True:
     Client, address = ServerSocket.accept()
-    online_clients += [Client]
+    online_clients.append(Client)
     print('Online Clients = ', online_clients)
     client_handler = threading.Thread(
         target=threaded_client,
