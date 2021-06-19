@@ -1,4 +1,3 @@
-import encrypt_decrypt_aes
 import socket
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -23,6 +22,9 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
+import json
+from Crypto.PublicKey import RSA
+import ast
 
 
 def create_public_private_key():
@@ -147,11 +149,35 @@ def verify(message, signature, public_key):
     return signer.verify(digest, signature)
 
 
-def send_image():
+def encrypt_with_rsa_public_key(public_key, message):
+    return public_key.encrypt(message, 32)
+
+
+def decrypt_message_with_private_key(private_key, encrypted):
+    return private_key.decrypt(ast.literal_eval(str(encrypted)))
+
+
+def send_image(private_key, socket):
+    # generate key and iv
     key = get_random_bytes(16)
     iv = Random.new().read(AES.block_size)
 
     encrypted_img = encrypt_image(key, iv, "kyle.png")
+
+    digital_sign = b64encode(sign(encrypted_img, private_key))
+
+    # TODO implement public key enryption
+    encrypted_key = encrypt_with_rsa_public_key(public_key, key)
+    encrypted_iv = encrypt_with_rsa_public_key(public_key, iv)
+
+    m = {"type": "POST_IMAGE", "encrypted_img": encrypted_img, "digital_sign": digital_sign,
+         "encrypted_key": encrypted_key, "encrypted_iv": encrypted_iv}
+    data = json.dumps(m)
+
+    socket.sendall(bytes(data, encoding="utf-8"))
+
+    socket.close()
+
 
 def load_public_key(filename):
     with open(filename, "rb") as key_file:
@@ -164,7 +190,8 @@ def load_public_key(filename):
 
 def verify_certificate(certificate_file):
     server_public_key = load_public_key('server_public_key.pem')
-    user_public_key = load_public_key('public_key.pem').public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    user_public_key = load_public_key('public_key.pem').public_bytes(
+        encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
     print('user_public_key', user_public_key)
 
     with open(certificate_file) as s:
@@ -179,10 +206,10 @@ def verify_certificate(certificate_file):
                     salt_length=padding.PSS.MAX_LENGTH),
                 hashes.SHA256())
             print('Valid Certificate')
-            #sys.exit(0)
+            # sys.exit(0)
         except InvalidSignature:
             print('Invalid Certificate!')
-            #sys.exit(1)
+            # sys.exit(1)
 
 
 # create an ipv4 (AF_INET) socket object using the tcp protocol (SOCK_STREAM)
