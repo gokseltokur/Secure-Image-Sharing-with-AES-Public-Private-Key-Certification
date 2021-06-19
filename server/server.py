@@ -51,6 +51,7 @@ def sign_certificate(public_key, username):
         print(base64.b64encode(certificate))
         with open('certificates/certificate_' + str(username) + '.CA', 'wb') as f:
             f.write(base64.b64encode(certificate))
+    key_file.close()
 
 
 def create_server_public_private_key():
@@ -223,14 +224,20 @@ def threaded_client(connection):
             # Response Code for Connected Client
             connection.send(str.encode('Connection Successful'))
             print('Connected : ', name)
+
         else:
             # Response code for login failed
             connection.send(str.encode('Login Failed'))
             print('Connection denied : ', name)
     while True:
-        break
-    #connection.close()
+        request = connection.recv(2048)
 
+        if request == b'POST_IMAGE':
+            filesize = int(connection.recv(2048).decode())
+            filename = connection.recv(2048).decode()
+            receive_file(connection, "images/" + filename + '.txt', filesize)
+
+    #connection.close()
 
 def send_notification(online_clients, notification):
     notification = str.encode(notification)
