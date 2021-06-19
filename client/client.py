@@ -12,7 +12,7 @@ from Crypto.Cipher import AES
 import io
 import PIL.Image
 import os
-from Crypto.Signature import PKCS1_v1_5
+from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Hash import SHA256
 from Crypto import Random
 from Crypto.PublicKey import RSA
@@ -23,8 +23,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
 import json
-from Crypto.PublicKey import RSA
 import ast
+import simplejson
 
 
 def create_public_private_key():
@@ -118,60 +118,66 @@ def pad(data):
 def encrypt_image(key, iv, file):
 
     cwd = os.getcwd()
+    print("cwd in encrypt image: " + cwd)
     input_file = open(cwd + "/" + file, "rb")
     input_data = input_file.read()
     input_file.close()
     cbc_cipher = AES.new(key, AES.MODE_CBC, iv)
     enc_data = cbc_cipher.encrypt(pad(input_data))
-    enc_file = open(os.path.join(cwd + "/common/", file)+".enc", "wb")
+    enc_file = open(os.path.join(cwd, file)+".enc", "wb")
     enc_file.write(enc_data)
     enc_file.close()
 
     return enc_data
 
 
-def decrypt_image(key, iv, enc_data):
+def decrypt_image(key, iv, enc_data, filename):
     cwd = os.getcwd()
+    print("cwd in decrypt image: " + cwd)
     cbc_cipher = AES.new(key, AES.MODE_CBC, iv)
     plain_data = cbc_cipher.decrypt(pad(enc_data))
 
     imageStream = io.BytesIO(plain_data)
     imageFile = PIL.Image.open(imageStream)
-    file_str = file.lower()
+    file_str = filename.lower()
     if(".jpg" in file_str):
-        imageFile.save(((os.path.join(cwd + "/common", file))[:-8])+".JPG")
+        imageFile.save(((os.path.join(cwd, filename))[:-8])+".JPG")
     elif(".png" in file_str):
-        imageFile.save(((os.path.join(cwd + "/common", file))[:-8]) + ".png")
+        imageFile.save(((os.path.join(cwd, filename))[:-8]) + ".png")
 
 
 def sign(message, private_key):
-    signer = PKCS1_v1_5.new(private_key)
-    digest = SHA256.new()
-    digest.update(message.encode('utf-8'))
-    return signer.sign(digest)
+    return private_key.sign(message, padding.PSS(mgf=padding.MGF1(
+        hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
 
 
 def verify(message, signature, public_key):
-    signer = PKCS1_v1_5.new(public_key)
-    digest = SHA256.new()
-    digest.update(message.encode('utf-8'))
-    return signer.verify(digest, signature)
+    return public_key.verify(
+        message,
+        signature,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256())
 
 
 def encrypt_with_rsa_public_key(public_key, message):
-    return public_key.encrypt(message, 32)
+    cipher = PKCS1_OAEP.new(public_key)
+    return cipher.encrypt(message)
 
 
 def decrypt_message_with_private_key(private_key, encrypted):
-    return private_key.decrypt(ast.literal_eval(str(encrypted)))
+    decipher = PKCS1_OAEP.new(private_key)
+    return decipher.decrypt(encrypted)
 
 
-def send_image(private_key, socket):
+def send_image(socket, private_key, public_key):
+    filename = "kyle.png"
     # generate key and iv
     key = get_random_bytes(16)
     iv = Random.new().read(AES.block_size)
 
-    encrypted_img = encrypt_image(key, iv, "kyle.png")
+    encrypted_img = encrypt_image(key, iv, filename)
 
     digital_sign = b64encode(sign(encrypted_img, private_key))
 
@@ -179,12 +185,26 @@ def send_image(private_key, socket):
     encrypted_key = encrypt_with_rsa_public_key(public_key, key)
     encrypted_iv = encrypt_with_rsa_public_key(public_key, iv)
 
-    m = {"type": "POST_IMAGE", "encrypted_img": encrypted_img, "digital_sign": digital_sign,
-         "encrypted_key": encrypted_key, "encrypted_iv": encrypted_iv}
-    print(m)
-    data = json.dumps(m)
+    # m = {"type": "POST_IMAGE", "encrypted_img": encrypted_img, "digital_sign": digital_sign,
+    #      "encrypted_key": encrypted_key, "encrypted_iv": encrypted_iv}
 
-    socket.sendall(bytes(data, encoding="utf-8"))
+    m = "POST_IMAGE\n\n" + str(encrypted_img) + '\n\n' + str(digital_sign) + \
+        '\n\n' + str(encrypted_key) + '\n\n' + str(encrypted_iv)
+    # print(m)
+    # data = json.dumps(m)
+
+    with open(filename + '.txt', 'w') as outfile:
+        outfile.write(m)
+    outfile.close()
+
+    socket.send(b"POST_IMAGE")
+
+    filesize = os.path.getsize('data.txt')
+
+    socket.send(str.encode(str(filesize)))
+    socket.send(filename.encode())
+
+    send_file(socket, 'data.txt', filesize)
 
 
 def load_public_key(filename):
@@ -242,7 +262,7 @@ client.send(str.encode(password))
 
 
 # Input Public Key
-public_key, _ = create_public_private_key()
+public_key, private_key = create_public_private_key()
 
 # Send public key of client
 filesize = os.path.getsize('public_key.pem')
@@ -262,11 +282,18 @@ receive_file(client, 'server_public_key.pem', filesize)
 
 verify_certificate('certificate.CA')
 
-
 # Receive response
 response = client.recv(2048)
 response = response.decode()
 print(response)
+
+if response == "Registration Successful":
+    print("girdi")
+    f = open('server_public_key.pem', 'r')
+    server_public_key = RSA.importKey(f.read())
+    f.close()
+
+    send_image(client, private_key, server_public_key)
 
 
 while True:
