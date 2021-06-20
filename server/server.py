@@ -337,11 +337,7 @@ def threaded_client(connection):
             filename = connection.recv(2048).decode()
             receive_file(connection, "images/" + filename + '.txt', filesize)
 
-<<<<<<< HEAD
-            # verify_image(filename, name)
-=======
             #verify_image(filename)
->>>>>>> 258ff78682a110c9512f8258116c34dc96110ac3
             send_notification(online_clients, "\nNEW_IMAGE " + filename)
 
         elif request.split()[0] == 'DOWNLOAD':

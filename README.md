@@ -222,3 +222,126 @@ while True:
 ## 1) An example demo :
    
 ![GitHub Logo](/ss/demo.png)
+
+
+## 4. Image Download
+After receiving the NEW_IMAGE message, a user can download
+the image by sending a “DOWNLOAD image_name” message to the server. When
+server receives this message, it sends the encrypted image, digital signature,
+certificated public key of the owner, and the AES key encrypted with the public key of
+requesting user.
+```python
+if splitted_response[0] == b"NEW_IMAGE":
+    print('girdi')
+    client.send(b"DOWNLOAD " + splitted_response[1])
+
+    filesize = int(client.recv(2048).decode())
+    receive_file(client, 'downloads/' + splitted_response[1].decode() + '.txt', filesize)
+
+    verify_image(splitted_response[1].decode())
+```
+## 5. Decryption and Verification
+After receiving these, user first extracts the AES key.
+Next, she decrypts the image. Then, she checks the integrity and authentication of the
+image by verifying the digital signature.
+```python
+def verify_image(filename, username):
+    with open("images/" + filename + '.txt', "rb") as image_file:
+        data = image_file.read()
+
+    splitted_data = data.split(b'\n\n')
+
+    # image encrypted with aes key
+    enrypted_img = splitted_data[1]
+    # digital signature created with private key of the client
+    digital_signature = splitted_data[2]
+    # aes key and iv encrypted with public key of the server
+    encrypted_key = splitted_data[3]
+    encrypted_iv = splitted_data[4]
+
+    f = open('server_private_key.pem', 'r')
+    server_private_key = RSA.importKey(f.read())
+
+    key = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_key))
+    iv = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_iv))
+
+    decrypted_img = decrypt_image(key, iv, b64decode(enrypted_img), filename)
+
+    f = open('public_keys/public_key_' + username + '.pem', 'r')
+    user_public_key = RSA.importKey(f.read())
+
+    return verify(decrypted_img, digital_signature, user_public_key)
+```
+```python
+def send_image(socket, requester_public_key, filename):
+    with open("images/" + filename + '.txt', "rb") as image_file:
+        data = image_file.read()
+
+    splitted_data = data.split(b'\n\n')
+
+    # image encrypted with aes key
+    encrypted_img = splitted_data[1]
+    # digital signature created with private key of the client
+    digital_signature = splitted_data[2]
+    # aes key and iv encrypted with public key of the server
+    encrypted_key = splitted_data[3]
+    encrypted_iv = splitted_data[4]
+    sender_certificate = splitted_data[5]
+
+    f = open('server_private_key.pem', 'r')
+    server_private_key = RSA.importKey(f.read())
+
+    key = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_key))
+    iv = decrypt_message_with_private_key(server_private_key, b64decode(encrypted_iv))
+
+    requester_encrypted_key = encrypt_with_rsa_public_key(requester_public_key, key)
+    requester_encrypted_iv = encrypt_with_rsa_public_key(requester_public_key, iv)
+
+    m = b64encode(encrypted_img) + b'\n\n' + b64encode(digital_signature) + \
+        b'\n\n' + sender_certificate + b'\n\n' + b64encode(requester_encrypted_key) + b'\n\n' + b64encode(requester_encrypted_iv)
+
+    with open('send_files/' + filename + '.txt', 'wb') as outfile:
+        outfile.write(m)
+    outfile.close()
+
+    filesize = os.path.getsize('send_files/' + filename + '.txt')
+
+    socket.send(str.encode(str(filesize)))
+
+    send_file(socket, 'send_files/' + filename + '.txt', filesize)
+    
+```
+* Below parts is not fully completed.
+  * Decrypt certificate
+  * Verify image
+```python
+def verify_image(filename):
+    with open("downloads/" + filename + '.txt', "rb") as image_file:
+        data = image_file.read()
+
+    splitted_data = data.split(b'\n\n')
+
+    # image encrypted with aes key
+    enrypted_img = splitted_data[0]
+    # digital signature created with private key of the client
+    digital_signature = splitted_data[1]
+    certificate = splitted_data[2]
+    # aes key and iv encrypted with public key of the server
+    encrypted_key = splitted_data[3]
+    encrypted_iv = splitted_data[4]
+
+    f = open('private_key.pem', 'r')
+    private_key = RSA.importKey(f.read())
+
+    key = decrypt_message_with_private_key(private_key, b64decode(encrypted_key))
+    iv = decrypt_message_with_private_key(private_key, b64decode(encrypted_iv))
+
+    decrypted_img = decrypt_image(key, iv, b64decode(enrypted_img), filename)
+
+    # save_image(decrypted_img, filename)
+
+    # f = open('server_public_key.pem', 'r')
+    # server_public_key = RSA.importKey(f.read())
+
+    # return verify(decrypted_img, digital_signature, server_public_key)
+```
