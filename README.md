@@ -217,12 +217,6 @@ while True:
     ThreadCount += 1
     print('Connection Request: ' + str(ThreadCount))
 ```
-# Example screen captures:
-
-## 1) An example demo :
-   
-![GitHub Logo](/ss/demo.png)
-
 
 ## 4. Image Download
 After receiving the NEW_IMAGE message, a user can download
@@ -345,3 +339,10 @@ def verify_image(filename):
 
     # return verify(decrypted_img, digital_signature, server_public_key)
 ```
+
+# Example screen captures:
+
+## 1) Example demo screenshots :
+   
+![Demo1](/ss/demo.png)
+![Demo2](/ss/demo2.png)
