@@ -138,12 +138,15 @@ def decrypt_image(key, iv, enc_data, filename):
 
     imageStream = io.BytesIO(plain_data)
     imageFile = PIL.Image.open(imageStream)
-    file_str = filename.lower()
-    if(".jpg" in file_str):
-        imageFile.save(((os.path.join(cwd, filename))[:-8])+".JPG")
-    elif(".png" in file_str):
-        imageFile.save(((os.path.join(cwd, filename))[:-8]) + ".png")
+    imageFile.save(filename)
 
+    return plain_data
+
+def save_image(plain_data, filename):
+    imageStream = io.BytesIO(plain_data)
+    imageFile = PIL.Image.open(imageStream)
+    imageFile.save('downloads/' +filename)
+    
 
 def sign(message, private_key):
     return private_key.sign(message, padding.PSS(mgf=padding.MGF1(
@@ -151,13 +154,14 @@ def sign(message, private_key):
 
 
 def verify(message, signature, public_key):
-    return public_key.verify(
-        message,
-        signature,
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()),
-            salt_length=padding.PSS.MAX_LENGTH),
-        hashes.SHA256())
+    try:
+        public_key.verify(message, signature, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
+        
+        print('Valid Signature')
+        return True
+    except InvalidSignature:
+        print('Invalid Signature!')
+        return False
 
 
 def encrypt_with_rsa_public_key(public_key, message):
@@ -171,7 +175,7 @@ def decrypt_message_with_private_key(private_key, encrypted):
 
 
 def send_image(socket, private_key, public_key):
-    filename = "another_image.png"
+    filename = "image.png"
     # generate key and iv
     key = get_random_bytes(16)
     iv = Random.new().read(AES.block_size)
@@ -183,15 +187,22 @@ def send_image(socket, private_key, public_key):
     encrypted_key = encrypt_with_rsa_public_key(public_key, key)
     encrypted_iv = encrypt_with_rsa_public_key(public_key, iv)
 
+    print(b64encode(encrypted_key))
+
+    print(b64encode(encrypted_iv))
+
+    f = open('certificate.CA', 'rb')
+    certificate = f.read()
+
     # m = {"type": "POST_IMAGE", "encrypted_img": encrypted_img, "digital_sign": digital_sign,
     #      "encrypted_key": encrypted_key, "encrypted_iv": encrypted_iv}
 
-    m = "POST_IMAGE\n\n" + str(encrypted_img) + '\n\n' + str(digital_sign) + \
-        '\n\n' + str(encrypted_key) + '\n\n' + str(encrypted_iv)
+    m = b"POST_IMAGE\n\n" + b64encode(encrypted_img) + b'\n\n' + b64encode(digital_sign) + \
+        b'\n\n' + b64encode(encrypted_key) + b'\n\n' + b64encode(encrypted_iv) + b'\n\n' + certificate
     # print(m)
     # data = json.dumps(m)
 
-    with open(filename + '.txt', 'w') as outfile:
+    with open(filename + '.txt', 'wb') as outfile:
         outfile.write(m)
     outfile.close()
 
@@ -200,6 +211,7 @@ def send_image(socket, private_key, public_key):
     filesize = os.path.getsize(filename + '.txt')
 
     socket.send(str.encode(str(filesize)))
+
     socket.send(filename.encode())
 
     send_file(socket, filename + '.txt', filesize)
@@ -237,6 +249,35 @@ def verify_certificate(certificate_file):
             print('Invalid Certificate!')
             # sys.exit(1)
 
+def verify_image(filename):
+    with open("downloads/" + filename + '.txt', "rb") as image_file:
+        data = image_file.read()
+
+    splitted_data = data.split(b'\n\n')
+
+    # image encrypted with aes key
+    enrypted_img = splitted_data[0]
+    # digital signature created with private key of the client
+    digital_signature = splitted_data[1]
+    certificate = splitted_data[2]
+    # aes key and iv encrypted with public key of the server
+    encrypted_key = splitted_data[3]
+    encrypted_iv = splitted_data[4]
+
+    f = open('private_key.pem', 'r')
+    private_key = RSA.importKey(f.read())
+
+    key = decrypt_message_with_private_key(private_key, b64decode(encrypted_key))
+    iv = decrypt_message_with_private_key(private_key, b64decode(encrypted_iv))
+
+    decrypted_img = decrypt_image(key, iv, b64decode(enrypted_img), filename)
+
+    # save_image(decrypted_img, filename)
+
+    # f = open('server_public_key.pem', 'r')
+    # server_public_key = RSA.importKey(f.read())
+
+    # return verify(decrypted_img, digital_signature, server_public_key)
 
 # create an ipv4 (AF_INET) socket object using the tcp protocol (SOCK_STREAM)
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -298,5 +339,20 @@ while True:
     response = client.recv(2048)
     print(response.decode())
 
+    splitted_response = response.split()
+
+    print(splitted_response[0])
+    print(splitted_response[1])
+
+    if splitted_response[0] == b"NEW_IMAGE":
+        print('girdi')
+        client.send(b"DOWNLOAD " + splitted_response[1])
+
+        filesize = int(client.recv(2048).decode())
+        receive_file(client, 'downloads/' + splitted_response[1].decode() + '.txt', filesize)
+
+        #verify_image(splitted_response[1].decode())
+
+        
 
 client.close()

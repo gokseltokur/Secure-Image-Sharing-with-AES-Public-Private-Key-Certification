@@ -351,7 +351,7 @@ while True:
         filesize = int(client.recv(2048).decode())
         receive_file(client, 'downloads/' + splitted_response[1].decode() + '.txt', filesize)
 
-        verify_image(splitted_response[1].decode())
+        #verify_image(splitted_response[1].decode())
 
         
 
