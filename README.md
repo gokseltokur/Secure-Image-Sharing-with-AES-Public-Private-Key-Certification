@@ -1,8 +1,8 @@
 # Secure Image Sharing with AES Public Private Key Certification
-## Group Members
-* Göksel Tokur - 150116049
-* Ertuğrul Sağdıç - 150116061
-* Arda Bayram - 150116029
+## Team Members
+* Göksel Tokur
+* Ertuğrul Sağdıç
+* Arda Bayram
 
 ## <> This project is a simple image sharing system with several security features. <>
 ## 1. Registration and Public Key Certification
